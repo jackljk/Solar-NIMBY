@@ -4,7 +4,7 @@ from utils import *
 datapaths = {
     "Wind": "data/wind/ez_gis.plant_power_eia_v8_wind.shp",
     "GDP": "data/gdp_data.csv",
-    "Solar": "data/solar-(jenny's_data).csv",
+    "Solar": "data/solar_data.csv",
     "education": "data/education_data.csv",
     "private_schools": "data/private_school_data.csv",
     "DEC_race": "data/race_dec_data.csv",

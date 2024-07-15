@@ -112,6 +112,13 @@ def get_solar(datapath, fixed_BB):
     fixed_BB: the fixed bounding box dataframe
     """
     solar = pd.read_csv(datapath)
+    
+    solar_sum = solar.groupby(['statename', 'county']).sum().reset_index()
+    solar_avg = solar.groupby(['statename', 'county']).mean().reset_index()
+    solar_count = solar.groupby(['statename', 'county']).count().reset_index()
+    solar_merged = solar_sum.merge(solar_avg, on=['statename', 'county'], suffixes=('_sum', '_avg')).merge(solar_count, on=['statename', 'county'])
+    solar_merged.columns = ['state', 'county', 'solar_mw_sum', 'solar_mw_avg', 'solar_mw_count']
+    
     solar_cols = solar[
         ["state", "county", "solar_mw_sum", "solar_mw_avg", "solar_mw_count"]
     ]
