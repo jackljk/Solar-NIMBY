@@ -3,6 +3,7 @@ import pandas as pd
 from helpers import *
 
 state_abbreviations = get_state_abbr()
+FIPS = FIPS_getter()
 
 
 #### WIND CLEANING #####
@@ -21,8 +22,8 @@ def get_wind(datapath, fixed_BB):
         .reset_index()
         .rename(
             columns={
-                "statename": "state",
-                "county": "county",
+                "statename": "State",
+                "county": "County Name",
                 "wind_mw": "total_wind_mw",
             }
         )
@@ -33,7 +34,7 @@ def get_wind(datapath, fixed_BB):
         .mean()
         .reset_index()
         .rename(
-            columns={"statename": "state", "county": "county", "wind_mw": "avg_wind_mw"}
+            columns={"statename": "State", "county": "County Name", "wind_mw": "avg_wind_mw"}
         )
     )
     wind_project_count = (
@@ -41,14 +42,14 @@ def get_wind(datapath, fixed_BB):
         .count()
         .reset_index()[["statename", "county", "plant_code"]]
         .rename(
-            columns={"statename": "state", "county": "county", "plant_code": "count"}
+            columns={"statename": "State", "county": "County Name", "plant_code": "wind_count"}
         )
     )
 
     wind_df = (
-        fixed_BB.merge(wind_sum_mw, on=["state", "county"], how="left")
-        .merge(wind_avg_mw, on=["state", "county"], how="left")
-        .merge(wind_project_count, on=["state", "county"], how="left")
+        fixed_BB.merge(wind_sum_mw, on=["State", "County Name"], how="left")
+        .merge(wind_avg_mw, on=["State", "County Name"], how="left")
+        .merge(wind_project_count, on=["State", "County Name"], how="left")
         .fillna(0)
     )
 
@@ -56,8 +57,14 @@ def get_wind(datapath, fixed_BB):
         wind_df["total_wind_mw"] / wind_df["area mi2"] * 1000
     )
     wind_df["Wind Project Intensity (Projects / 1000 sq mile)"] = (
-        wind_df["count"] / wind_df["area mi2"] * 1000
+        wind_df["wind_count"] / wind_df["area mi2"] * 1000
     )
+    
+    wind_df["Wind Avg Capacity Intensity (MW / 1000 sq mile)"] = (
+        wind_df["avg_wind_mw"] / wind_df["area mi2"] * 1000
+    )
+    
+    wind_df = wind_df.drop(columns=['GEOID', 'total_wind_mw', 'wind_count', 'avg_wind_mw'])
 
     return wind_df
 
@@ -74,11 +81,12 @@ def get_GDP(datapath, fixed_BB):
     """
     gdp_data = pd.read_csv(datapath)
     gdp_data["Description"] = gdp_data["Description"].str.strip()
+    gdp_data = gdp_data.rename(columns={"state": "State", "county": "County Name"})
     norm_real_GDP = gdp_data[
         gdp_data["Description"] == "Real GDP (thousands of chained 2017 dollars)"
     ]
     norm_real_GDP = fixed_BB.merge(
-        norm_real_GDP, on=["state", "county"], how="left"
+        norm_real_GDP, on=["State", "County Name"], how="left"
     ).fillna(0)
     norm_real_GDP = norm_real_GDP[["area mi2"] + list(gdp_data.columns.values)]
     norm_real_GDP = norm_real_GDP.drop(columns=["Description"])
@@ -97,42 +105,62 @@ def get_GDP(datapath, fixed_BB):
         # round to 2 decimal places
         norm_real_GDP[col] = norm_real_GDP[col].round(2)
 
+    norm_real_GDP = norm_real_GDP.drop(columns=["area mi2"]).rename(columns={'state': 'State', 'county': 'County Name'})
     return norm_real_GDP
 
 
 #### Solar Cleaning #####
 
 
-def get_solar(datapath, fixed_BB):
+def get_solar(datapath, fixed_BB, size = 'all'):
     """
     Function to get the solar data normalized by area
 
-    datapath: path to the solar data (from your inital cleaning process i.e "US Counties Deply Metrics Technoecon")
-        - send me the original solar and I can use that instead to make it cleaner
+    datapath: path to the solar data 
     fixed_BB: the fixed bounding box dataframe
     """
     solar = pd.read_csv(datapath)
+    solar = solar[['statename', 'county', 'solar_mw']]
     
-    solar_sum = solar.groupby(['statename', 'county']).sum().reset_index()
-    solar_avg = solar.groupby(['statename', 'county']).mean().reset_index()
-    solar_count = solar.groupby(['statename', 'county']).count().reset_index()
-    solar_merged = solar_sum.merge(solar_avg, on=['statename', 'county'], suffixes=('_sum', '_avg')).merge(solar_count, on=['statename', 'county'])
-    solar_merged.columns = ['state', 'county', 'solar_mw_sum', 'solar_mw_avg', 'solar_mw_count']
+    if size == 'all':
+        solar_grouped = solar.groupby(['statename', 'county'])
+    elif size == 'small':
+        solar_grouped = solar[solar['solar_mw'] < 5].groupby(['statename', 'county'])
+    elif size == 'medium':
+        solar_grouped = solar[(solar['solar_mw'] >= 5) & (solar['solar_mw'] < 25)].groupby(['statename', 'county'])
+    elif size == 'large':
+        solar_grouped = solar[solar['solar_mw'] >= 25].groupby(['statename', 'county'])
+    else:
+        raise ValueError(f"Invalid size type: {size}")
+
+    solar_sum_all = solar_grouped.sum().reset_index()
+    solar_avg_all = solar_grouped.mean().reset_index()
+    solar_count_all = solar_grouped.count().reset_index()
+
+    solar_merged = solar_sum_all.merge(solar_avg_all, on=['statename', 'county'], suffixes=('_sum', '_avg')).merge(solar_count_all, on=['statename', 'county'])
     
-    solar_cols = solar[
-        ["state", "county", "solar_mw_sum", "solar_mw_avg", "solar_mw_count"]
-    ]
-    solar_with_area = solar_cols.merge(fixed_BB, on=["state", "county"]).drop(
+    
+    solar_merged.columns = ['state', 'county', 'solar_mw_sum_' + size, 'solar_mw_avg_' + size, 'solar_mw_count_' + size]
+
+    
+    
+    solar_with_area = solar_merged.rename(columns={'state': 'State', 'county': 'County Name'}).merge(fixed_BB, on=["State", "County Name"]).drop(
         columns=["GEOID"]
     )
-    solar_with_area["Solar MW 1000 sq mile"] = (
-        solar_with_area["solar_mw_sum"] / solar_with_area["area mi2"]
+    solar_with_area["Solar MW 1000 sq mile " + size] = (
+        solar_with_area["solar_mw_sum_" + size] / solar_with_area["area mi2"] * 1000
     )
-    solar_with_area["Solar Projects 1000 sq mile"] = (
-        solar_with_area["solar_mw_count"] / solar_with_area["area mi2"]
+    solar_with_area["Solar Projects 1000 sq mile " + size] = (
+        solar_with_area["solar_mw_count_" + size] / solar_with_area["area mi2"] * 1000
     )
+    
+    solar_with_area["Solar MW Avg 1000 sq mile " + size] = (
+        solar_with_area["solar_mw_avg_" + size ] / solar_with_area["area mi2"] * 1000
+    )
+    
+    return solar_with_area[['State', 'County Name', 'Solar MW 1000 sq mile ' + size, 'Solar Projects 1000 sq mile ' + size, 'Solar MW Avg 1000 sq mile ' + size]]
 
-    return solar_with_area
+
 
 
 #### Education Level Cleaning #####
@@ -164,13 +192,9 @@ def get_education_18_24(datapath):
 
     # get all columns that include the word 'estimate' and '18 to 24 years'
     data_18_24_estimates = data.loc[:, important_columns_18_24]
-    state_counties = data.loc[:, ["Geographic Area Name"]]
-    state_counties["state"] = state_counties["Geographic Area Name"].apply(
-        lambda x: x.split(", ")[1].split("!!")[0]
-    )
-    state_counties["county"] = state_counties["Geographic Area Name"].apply(
-        lambda x: " ".join(x.split(", ")[0].split(" ")[:-1]).rstrip()
-    )
+    state_counties = data.loc[:, ["Geographic Area Name", "Geography"]]
+    state_counties['FIPS State'] = state_counties['Geography'].apply(lambda x: x.split('US')[1][:2])
+    state_counties['FIPS County'] = state_counties['Geography'].apply(lambda x: x.split('US')[1][2:])
 
     data_18_24_estimates = (
         pd.concat([state_counties, data_18_24_estimates], axis=1)
@@ -183,6 +207,9 @@ def get_education_18_24(datapath):
         )
         .rename(columns=rename_dict)
     )
+    data_18_24_estimates = data_18_24_estimates.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    data_18_24_estimates = data_18_24_estimates.drop(columns=['FIPS State', 'FIPS County', 'Geography'])
+
 
     return data_18_24_estimates
 
@@ -219,13 +246,9 @@ def get_education_25_over(datapath):
 
     # get all columns that include the word 'estimate' and '18 to 24 years'
     data_25_over_estimates = data.loc[:, important_columns_25_over]
-    state_counties = data.loc[:, ["Geographic Area Name"]]
-    state_counties["state"] = state_counties["Geographic Area Name"].apply(
-        lambda x: x.split(", ")[1].split("!!")[0]
-    )
-    state_counties["county"] = state_counties["Geographic Area Name"].apply(
-        lambda x: " ".join(x.split(", ")[0].split(" ")[:-1]).rstrip()
-    )
+    state_counties = data.loc[:, ["Geographic Area Name", 'Geography']]
+    state_counties['FIPS State'] = state_counties['Geography'].apply(lambda x: x.split('US')[1][:2])
+    state_counties['FIPS County'] = state_counties['Geography'].apply(lambda x: x.split('US')[1][2:])
 
     data_25_over_estimates = (
         pd.concat([state_counties, data_25_over_estimates], axis=1)
@@ -238,32 +261,32 @@ def get_education_25_over(datapath):
         )
         .rename(columns=rename_dict_25_over)
     )
+    
+    data_25_over_estimates = data_25_over_estimates.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    data_25_over_estimates = data_25_over_estimates.drop(columns=['FIPS State', 'FIPS County', 'Geography'])
 
     return data_25_over_estimates
 
 
 #### Private Schools #####
 def get_no_priv_schools(datapath):
-    data = pd.read_csv(datapath)
-    data_clean = data[["NAME", "STATE", "NMCNTY"]].copy()
+    data = pd.read_csv(datapath, dtype={'CNTY': str, 'STFIP': str})
+    data_clean = data[["NAME", "STFIP", "CNTY"]].copy()
 
-    # Replace all state abbr to fullname
-    data_clean["STATE"] = data_clean["STATE"].map(state_abbreviations)
+    # Get the County FIPS which is the last 3 digits of the STFIP
+    data_clean['FIPS County'] = data_clean['CNTY'].apply(lambda x: str(x)[-3:])
+    data_clean = data_clean.rename(columns={"STFIP": "FIPS State"})
 
-    # Remove "County" from county names
-    data_clean["NMCNTY"] = data_clean["NMCNTY"].str.replace(" County", "")
     no_priv_sch = (
-        data_clean.groupby(["STATE", "NMCNTY"])
+        data_clean.groupby(["FIPS State", "FIPS County"])
         .count()
-        .reset_index()[["STATE", "NMCNTY", "NAME"]]
-        .rename(
-            columns={
-                "STATE": "state",
-                "NMCNTY": "county",
-                "NAME": "No. of Private Schools",
-            }
-        )
+        .reset_index()[["FIPS State", "FIPS County", "CNTY"]]
+        .rename(columns={"CNTY": "No. of Private Schools"})
     )
+    no_priv_sch['FIPS State'] = no_priv_sch['FIPS State']
+    no_priv_sch = no_priv_sch.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    no_priv_sch = no_priv_sch.drop(columns=['FIPS State', 'FIPS County'])
+    
     return no_priv_sch
 
 
@@ -279,25 +302,21 @@ def get_race_dec(datapath):
             " !!Total:!!Not Hispanic or Latino:!!Population of two or more races:!!Population of two races:"
         ]
     )
-    df_totals = df[col_of_interest]
+    df_totals = df[col_of_interest + ['Geography']].drop(columns=['Geographic Area Name'])
     df_totals.columns = (
         df_totals.columns.str.replace("!!Total:", "Total")
         .str.replace("!!Not Hispanic or Latino", "")
         .str.strip()
     )
-    df_totals = df_totals.set_index("Geographic Area Name")
+    df_totals = df_totals.set_index("Geography")
     df_totals = df_totals.apply(to_int)
     df_totals = (
         df_totals.div(df_totals["Total"], axis=0).drop(columns=["Total"]).reset_index()
     )
-    df_totals["state"] = df_totals["Geographic Area Name"].apply(
-        lambda x: x.split(", ")[1]
-    )
-    df_totals["county"] = (
-        df_totals["Geographic Area Name"]
-        .apply(lambda x: x.split(", ")[0])
-        .str.replace(" County", "")
-    )
+    df_totals["FIPS State"] = df_totals["Geography"].apply(lambda x: x.split('US')[1][:2])
+
+    df_totals["FIPS County"] = df_totals["Geography"].apply(lambda x: x.split('US')[1][2:])
+
     mapper = {
         "Total!!Hispanic or Latino": "Hispanic/Latino",
         "Total:!!Population of one race:!!White alone": "White",
@@ -307,7 +326,7 @@ def get_race_dec(datapath):
         "Total:!!Population of one race:!!Native Hawaiian and Other Pacific Islander alone": "Native Hawaiian/Other Pacific Islander",
         "Total:!!Population of one race:!!Some Other Race alone": "Others",
     }
-    df_cleaned = df_totals.drop(columns=["Geographic Area Name"]).rename(columns=mapper)
+    df_cleaned = df_totals.rename(columns=mapper).drop(columns=["Geography"])
     df_cleaned["Others"] = (
         df_cleaned["Others"]
         + df_cleaned[
@@ -317,7 +336,9 @@ def get_race_dec(datapath):
     df_cleaned = df_cleaned.drop(
         columns=["Total:!!Population of two or more races:!!Population of two races:"]
     )
-    df_cleaned["county"] = df_cleaned["county"].str.replace(" Parish", "")
+    
+    df_cleaned = df_cleaned.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    df_cleaned = df_cleaned.drop(columns=['FIPS State', 'FIPS County'])
     return df_cleaned
 
 
@@ -328,27 +349,22 @@ def get_race_acs(datapath):
     df = df[1:].drop(columns=[df.columns[-1]])
     estimate_cols = [col for col in df.columns if "Estimate" in col]
     df_estimates = df[
-        ["Geographic Area Name"] + estimate_cols[: len(estimate_cols) - 2]
+        ["Geography"] + estimate_cols[: len(estimate_cols) - 2]
     ]
     df_estimates.columns = df_estimates.columns.str.replace(
         "Estimate!!", ""
     ).str.replace("Total:!!", "")
     # divide all columns by the total population
-    df_estimates = df_estimates.set_index("Geographic Area Name")
+    df_estimates = df_estimates.set_index("Geography")
     df_estimates = df_estimates.apply(to_int)
     df_estimates = (
         df_estimates.div(df_estimates["Total:"], axis=0)
         .drop(columns=["Total:"])
         .reset_index()
     )
-    df_estimates["state"] = df_estimates["Geographic Area Name"].apply(
-        lambda x: x.split(", ")[1]
-    )
-    df_estimates["county"] = (
-        df_estimates["Geographic Area Name"]
-        .apply(lambda x: x.split(", ")[0])
-        .str.replace(" County", "")
-    )
+    df_estimates["FIPS State"] = df_estimates["Geography"].apply(lambda x: x.split('US')[1][:2])
+    df_estimates["FIPS County"] = df_estimates["Geography"].apply(lambda x: x.split('US')[1][2:])
+    
     mapper = {
         "Total:": "Total",
         "White alone": "White",
@@ -361,9 +377,12 @@ def get_race_acs(datapath):
         df_estimates["Some other race alone"] + df_estimates["Two or more races:"]
     )
     df_cleaned = df_estimates.drop(
-        columns=["Geographic Area Name", "Some other race alone", "Two or more races:"]
+        columns=["Geography", "Some other race alone", "Two or more races:"]
     ).rename(columns=mapper)
-    df_cleaned["county"] = df_cleaned["county"].str.replace(" Parish", "")
+
+    df_cleaned = df_cleaned.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    df_cleaned = df_cleaned.drop(columns=['FIPS State', 'FIPS County'])
+
     return df_cleaned
 
 
@@ -371,11 +390,16 @@ def get_race_acs(datapath):
 
 
 def get_election(datapath, party="all"):
-    data = pd.read_csv(datapath)
+    data = pd.read_csv(datapath, dtype={'county_fips': str})
+    data['county_fips'] = data['county_fips'].str[:-2]
+    data['FIPS County'] = data['county_fips'].apply(lambda x: str(x)[-3:].strip())
+
+    # state is not including the last three digits of the fips code
+    data['FIPS State'] = data['county_fips'].apply(lambda x: str(x)[:-3].strip())
     county_vote = data[
         [
-            "state",
-            "county_name",
+            "FIPS County",
+            "FIPS State",
             "candidate",
             "mode",
             "party",
@@ -383,36 +407,41 @@ def get_election(datapath, party="all"):
             "totalvotes",
         ]
     ]
-
+    FIPS_int = FIPS.copy()
+    FIPS_int['FIPS State'] = FIPS_int['FIPS State'].astype(int).astype(str)
+    
     county_vote = (
-        county_vote.groupby(["state", "county_name", "party"]).sum().reset_index()
+        county_vote.groupby(["FIPS County", "FIPS State", "party"]).sum().reset_index()
     )
-    county_vote["state"] = county_vote["state"].str.capitalize()
-    county_vote["county_name"] = county_vote["county_name"].str.capitalize()
+    
+    county_vote = county_vote.merge(FIPS_int, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    
+    # Check of FIPS 1 and 001 is in the df
+    county_vote = county_vote.drop(columns=['FIPS State', 'FIPS County'])
+    
     county_vote["percentage_vote"] = (
         county_vote["candidatevotes"] / county_vote["totalvotes"]
     )
-    county_vote = county_vote.rename(columns={"county_name": "county"})
     county_vote = county_vote.drop(columns=["candidatevotes", "totalvotes"])
 
     county_vote_democrat = county_vote[county_vote["party"] == "DEMOCRAT"][
-        ["state", "county", "percentage_vote"]
+        ["State", "County Name", "percentage_vote"]
     ].rename({"percentage_vote": "democrat_percentage_vote"}, axis=1)
     county_vote_republican = county_vote[county_vote["party"] == "REPUBLICAN"][
-        ["state", "county", "percentage_vote"]
+        ["State", "County Name", "percentage_vote"]
     ].rename({"percentage_vote": "republican_percentage_vote"}, axis=1)
     county_vote_green = county_vote[county_vote["party"] == "GREEN"][
-        ["state", "county", "percentage_vote"]
+        ["State", "County Name", "percentage_vote"]
     ].rename({"percentage_vote": "green_percentage_vote"}, axis=1)
     county_vote_libertarian = county_vote[county_vote["party"] == "LIBERTARIAN"][
-        ["state", "county", "percentage_vote"]
+        ["State", "County Name", "percentage_vote"]
     ].rename({"percentage_vote": "libertarian_percentage_vote"}, axis=1)
     county_vote_other = county_vote[
         (county_vote["party"] != "DEMOCRAT")
         & (county_vote["party"] != "REPUBLICAN")
         & (county_vote["party"] != "GREEN")
         & (county_vote["party"] != "LIBERTARIAN")
-    ][["state", "county", "percentage_vote"]].rename(
+    ][["State", "County Name", "percentage_vote"]].rename(
         {"percentage_vote": "other_percentage_vote"}, axis=1
     )
 
@@ -445,27 +474,27 @@ def get_income(datapath):
     data = pd.read_csv(datapath)
     # make first row the header
     data.columns = data.iloc[0]
-    data = data[1:].drop(columns=["Geography"]).drop(columns=[data.columns[-1]])
+    data = data[1:].drop(columns=[data.columns[-1]])
     estimate_cols = [
         col
         for col in data.columns
         if "Estimate" in col and "Households" in col and "Median" in col
     ]
-    df_estimates = data[["Geographic Area Name"] + estimate_cols]
+    df_estimates = data[["Geography"] + estimate_cols]
     df_income_clean = df_estimates.rename(
         columns={"Estimate!!Households!!Median income (dollars)": "Median Income"}
     )
-    df_income_clean["state"] = df_income_clean["Geographic Area Name"].apply(
-        lambda x: x.split(", ")[1]
+    df_income_clean["FIPS State"] = df_income_clean["Geography"].apply(
+        lambda x: x.split('US')[1][:2]
     )
-    df_income_clean["county"] = (
-        df_income_clean["Geographic Area Name"]
-        .apply(lambda x: x.split(", ")[0])
-        .str.replace(" County", "")
+    df_income_clean["FIPS County"] = df_income_clean["Geography"].apply(
+        lambda x: x.split('US')[1][2:]
     )
-    df_income_clean = df_income_clean.drop(columns=["Geographic Area Name"])
-    # get rid of parish in the county column
-    df_income_clean["county"] = df_income_clean["county"].str.replace(" Parish", "")
+    
+    df_income_clean = df_income_clean.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    df_income_clean = df_income_clean.drop(columns=['FIPS State', 'FIPS County'])
+    
+    df_income_clean = df_income_clean.drop(columns=["Geography"]).drop_duplicates()
     return df_income_clean
 
 
@@ -480,16 +509,18 @@ def get_unemployment(datapath):
 
     # Get the columns we want "unemployment rate"
     cols = [x for x in data.columns if 'Population 16 years and over' in x and "AGE" not in x and "RACE" not in x and "Labor" not in x]
-    data = data[['Geography', 'Geographic Area Name'] + cols]
-    data_important = data[['Geography', 'Geographic Area Name'] + ["Estimate!!Total!!Population 16 years and over", "Estimate!!Unemployment rate!!Population 16 years and over"]]
+    data = data[['Geography'] + cols]
+    data_important = data[['Geography'] + ["Estimate!!Total!!Population 16 years and over", "Estimate!!Unemployment rate!!Population 16 years and over"]]
     
     data_important = data_important.rename(columns={"Estimate!!Total!!Population 16 years and over": "Total Unemployment", "Estimate!!Unemployment rate!!Population 16 years and over": "Unemployment Rate"})
     # split the geography column into state and county
-    data_important['state'] = data_important['Geographic Area Name'].apply(lambda x: x.split(", ")[1])
-    data_important['county'] = data_important['Geographic Area Name'].apply(lambda x: x.split(", ")[0])
-    data_important = data_important.drop(columns=['Geography', 'Geographic Area Name'])
+    data_important['FIPS State'] = data_important['Geography'].apply(lambda x: x.split('US')[1][:2])
+    data_important['FIPS County'] = data_important['Geography'].apply(lambda x: x.split('US')[1][2:])
+    data_important = data_important.drop(columns=['Geography'])
+    
+    data_important = data_important.merge(FIPS, left_on=['FIPS State', 'FIPS County'], right_on=['FIPS State', 'FIPS County'], how='inner')
+    data_important = data_important.drop(columns=['FIPS State', 'FIPS County'])
     # reorder columns
-    data_important = data_important[['state', 'county', 'Total Unemployment', 'Unemployment Rate']]
-    data_important['county'] = data_important['county'].str.replace(" County", "")
+    data_important = data_important[['State', 'County Name', 'Total Unemployment', 'Unemployment Rate']]
     
     return data_important

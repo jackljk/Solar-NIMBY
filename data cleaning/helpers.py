@@ -1,17 +1,33 @@
 import pandas as pd
 
+FIPS_DF = pd.read_csv("data/FIPS.csv", dtype=str)
 
 def to_int(df):
     # strip all ',' from string numbers
     df = df.apply(lambda x: x.replace(",", "") if type(x) == str else x)
     return df.astype(float)
 
-def merged_normalized_data(wind, gdp, solar):
-    important_cols = ['county', 'state', 'area mi2', "Wind Capacity Intensity (MW / 1000 sq mile)", "Wind Project Intensity (Projects / 1000 sq mile)", "GDP_2017", "GDP_2018", "GDP_2019", "GDP_2020", "GDP_2021", "GDP_2022","Solar MW 1000 sq mile", "Solar Projects 1000 sq mile"]
+def merged_normalized_data(wind, gdp, solar, BB):
+    important_cols = ["State", "County Name", "Wind Capacity Intensity (MW / 1000 sq mile)", "Wind Project Intensity (Projects / 1000 sq mile)", "Wind Avg Capacity Intensity (MW / 1000 sq mile)", "GDP_2017", "GDP_2018", "GDP_2019", "GDP_2020", "GDP_2021", "GDP_2022"]
 
-    merged = wind.merge(gdp, on=['county', 'state'], how='outer').merge(solar, on=['county', 'state'], how='outer')
+    merged = wind.merge(gdp, on=["State", "County Name"], how='outer')
+
     merged = merged[important_cols]
+    
+    merged = BB.merge(merged, on=["State", "County Name"], how='outer')
+    
+    if type(solar) == dict:
+        for key in solar.keys():
+            merged = merged.merge(solar[key], on=["State", "County Name"], how='outer')
+    else:
+        merged = merged.merge(solar, on=["State", "County Name"], how='outer')
+        
+
     return merged
+
+def FIPS_getter():
+    return FIPS_DF
+    
 
 def get_state_abbr():
     return {

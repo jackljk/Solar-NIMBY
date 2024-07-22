@@ -17,13 +17,34 @@ datapaths = {
 bounding_box = pd.read_csv("data/county_bounding_boxes.csv")
 
 def load_data(
-    race_type = 'DEC', election_type = 'Democrat', education_type = '18-24'
+    race_type = 'DEC', election_type = 'Democrat', education_type = '18-24', solar_type = 'all'
 ):
     
     # Normalized data
-    wind = get_wind(datapaths['Wind'], bounding_box)
+    wind = get_wind(datapaths['Wind'], bounding_box) 
     gdp = get_GDP(datapaths['GDP'], bounding_box)
-    solar = get_solar(datapaths['Solar'], bounding_box)
+
+    if solar_type == 'all':
+        solar_all= get_solar(datapaths['Solar'], bounding_box, size='all')
+        solar_small = get_solar(datapaths['Solar'], bounding_box, size='small')
+        solar_medium = get_solar(datapaths['Solar'], bounding_box, size='medium')
+        solar_large = get_solar(datapaths['Solar'], bounding_box, size='large')
+        solar = {
+            'all': solar_all,
+            'small': solar_small,
+            'medium': solar_medium,
+            'large': solar_large
+        }
+    elif solar_type == 'small_only':
+        solar = get_solar(datapaths['Solar'], bounding_box, size='small')
+    elif solar_type == 'medium_only':
+        solar = get_solar(datapaths['Solar'], bounding_box, size='medium')
+    elif solar_type == 'large_only':
+        solar = get_solar(datapaths['Solar'], bounding_box, size='large')
+    elif solar_type == 'all_only':
+        solar = get_solar(datapaths['Solar'], bounding_box, size='all')
+    else:
+        raise ValueError(f"Invalid solar type: {solar_type}")
     
     # Non-normalized data
     private_schools = get_no_priv_schools(datapaths['private_schools'])
@@ -67,33 +88,33 @@ def load_data(
         raise ValueError(f"Invalid education type: {education_type}")
     
     # Merge all normalized data
-    merged = merged_normalized_data(wind, gdp, solar)
+    merged = merged_normalized_data(wind, gdp, solar, bounding_box)
     
     # Merge Private Schools
-    merged = merged.merge(private_schools, on=['county', 'state'], how='outer')
+    merged = merged.merge(private_schools, on=["State", "County Name"], how='outer')
     
     # Merge Income
-    merged = merged.merge(income, on=['county', 'state'], how='outer')
+    merged = merged.merge(income, on=["State", "County Name"], how='outer')
     
     # Merged Unemployment
-    merged = merged.merge(unemployment, on=['county', 'state'], how='outer')
+    merged = merged.merge(unemployment, on=["State", "County Name"], how='outer')
     
     # Merge Race
-    merged = merged.merge(race, on=['county', 'state'], how='outer')
+    merged = merged.merge(race, on=["State", "County Name"], how='outer')
     
     # Merge Election
     if type(election) == dict:
         for key in election.keys():
-            merged = merged.merge(election[key], on=['county', 'state'], how='outer')
+            merged = merged.merge(election[key], on=["State", "County Name"], how='outer')
     else:
-        merged = merged.merge(election, on=['county', 'state'], how='outer')
+        merged = merged.merge(election, on=["State", "County Name"], how='outer')
         
     # Merge Education
     if education_type == "all":
-        merged = merged.merge(education_18_24, on=['county', 'state'], how='outer')
-        merged = merged.merge(education_25_over, on=['county', 'state'], how='outer')
+        merged = merged.merge(education_18_24, on=["State", "County Name"], how='outer')
+        merged = merged.merge(education_25_over, on=["State", "County Name"], how='outer')
     else:
-        merged = merged.merge(education, on=['county', 'state'], how='outer')
+        merged = merged.merge(education, on=["State", "County Name"], how='outer')
     
     return merged
     
