@@ -1,6 +1,7 @@
 import pandas as pd
 
 FIPS_DF = pd.read_csv("data/FIPS.csv", dtype=str)
+EIA_FIPS = pd.read_csv("data/EIA_ID.csv", dtype={'utility_id_eia': str, 'county_id_fips': str})[['county_id_fips', 'utility_id_eia']]
 
 def to_int(df):
     # strip all ',' from string numbers
@@ -28,6 +29,8 @@ def merged_normalized_data(wind, gdp, solar, BB):
 def FIPS_getter():
     return FIPS_DF
     
+def EIA_FIPS_getter():
+    return EIA_FIPS
 
 def get_state_abbr():
     return {

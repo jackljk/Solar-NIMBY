@@ -12,14 +12,15 @@ datapaths = {
     "election": "data/election_data.csv",
     "income": "data/income_data.csv",
     "unemployment": "data/unemployment_data.csv",
+    "electric": "data/electric_data.csv",
+    "NREL_Electric": "data/NREL_Electric_data.csv",
 }
 
-bounding_box = pd.read_csv("data/county_bounding_boxes.csv")
+bounding_box = pd.read_csv("data/county_bounding_boxes.csv", dtype={"FIPS State": str, "FIPS County": str})
 
 def load_data(
-    race_type = 'DEC', election_type = 'Democrat', education_type = '18-24', solar_type = 'all'
+    race_type = 'DEC', election_type = 'Democrat', education_type = '18-24', solar_type = 'all', electric_customer_class= 'both', electric_dataset='NREL'
 ):
-    
     # Normalized data
     wind = get_wind(datapaths['Wind'], bounding_box) 
     gdp = get_GDP(datapaths['GDP'], bounding_box)
@@ -50,6 +51,11 @@ def load_data(
     private_schools = get_no_priv_schools(datapaths['private_schools'])
     income = get_income(datapaths['income'])
     unemployment = get_unemployment(datapaths['unemployment'])
+    if electric_dataset == 'NREL':
+        electric = NREL_Electric(datapaths['NREL_Electric'])
+    elif electric_dataset == 'EIA':
+        electric = get_electric(datapaths['electric'], electric_customer_class)
+
     
     # Race
     if race_type == 'DEC':
@@ -115,6 +121,16 @@ def load_data(
         merged = merged.merge(education_25_over, on=["State", "County Name"], how='outer')
     else:
         merged = merged.merge(education, on=["State", "County Name"], how='outer')
+        
+    # Merge Electric
+    if electric_dataset == 'NREL':
+        merged = merged.merge(electric, on=["State", "County Name"], how='outer')
+    elif electric_dataset == 'EIA':
+        if electric_customer_class == 'both':
+            for k in electric.keys():
+                merged = merged.merge(electric[k], on=["State", "County Name"], how='outer')
+        else:
+            merged = merged.merge(electric, on=["State", "County Name"], how='outer')
     
     return merged
     
