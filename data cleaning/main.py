@@ -14,6 +14,7 @@ datapaths = {
     "unemployment": "data/unemployment_data.csv",
     "electric": "data/electric_data.csv",
     "NREL_Electric": "data/NREL_Electric_data.csv",
+    "population_data": "data/pop_data.csv"
 }
 
 bounding_box = pd.read_csv("data/county_bounding_boxes.csv", dtype={"FIPS State": str, "FIPS County": str})
@@ -23,7 +24,7 @@ def load_data(
 ):
     # Normalized data
     wind = get_wind(datapaths['Wind'], bounding_box) 
-    gdp = get_GDP(datapaths['GDP'], bounding_box)
+    gdp = get_GDP(datapaths['GDP'], bounding_box, datapaths['population_data'])
 
     if solar_type == 'all':
         solar_all= get_solar(datapaths['Solar'], bounding_box, size='all')

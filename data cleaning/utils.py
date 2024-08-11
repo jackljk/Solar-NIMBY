@@ -55,7 +55,7 @@ def get_wind(datapath, fixed_BB):
     )
 
     wind_df = (
-        fixed_BB.merge(wind_sum_mw, on=["State", "County Name"], how="left")
+        wind_sum_mw.merge(fixed_BB, on=["State", "County Name"], how="left")
         .merge(wind_avg_mw, on=["State", "County Name"], how="left")
         .merge(wind_project_count, on=["State", "County Name"], how="left")
         .fillna(0)
@@ -82,7 +82,7 @@ def get_wind(datapath, fixed_BB):
 #### GDP CLEANING #####
 
 
-def get_GDP(datapath, fixed_BB):
+def get_GDP(datapath, fixed_BB, pop_data):
     """
     Function to get the GDP data normalized by area
 
@@ -90,13 +90,15 @@ def get_GDP(datapath, fixed_BB):
     fixed_BB: the fixed bounding box dataframe
     """
     gdp_data = pd.read_csv(datapath, dtype={'GeoFIPS': str})
+    pop_data = pd.read_csv(pop_data, dtype={"STATE": str, "COUNTY": str})
     gdp_data['Description'] = gdp_data['Description'].str.strip()
     gdp_data = gdp_data[gdp_data["Description"] == "Real GDP (thousands of chained 2017 dollars)"]
     gdp_data['GeoFIPS'] = gdp_data['GeoFIPS'].str.strip().str.replace('"', '')
     gdp_data['County FIPS'] = gdp_data['GeoFIPS'].str[2:]
     gdp_data['State FIPS'] = gdp_data['GeoFIPS'].str[:2]
     gdp_data = gdp_data.merge(fixed_BB, left_on=['State FIPS', 'County FIPS'], right_on=['FIPS State', 'FIPS County'], how='inner')
-    gdp_data_important = gdp_data[["State", "County Name", "2017", '2018', '2019', '2020', '2021', '2022', 'area km2', 'area mi2']]
+    gdp_data = gdp_data.merge(pop_data, left_on=['State FIPS', 'County FIPS'], right_on=['STATE', 'COUNTY'], how='inner')
+    gdp_data_important = gdp_data[["State", "County Name", "2017", '2018', '2019', '2020', '2021', '2022', 'POPESTIMATE2022']]
     rename_dict = {
         '2017': 'GDP_2017',
         '2018': 'GDP_2018',
@@ -109,9 +111,11 @@ def get_GDP(datapath, fixed_BB):
     # divide all numerical columns by county area
     for col in rename_dict.values():
         gdp_data_important[col] = gdp_data_important[col].astype("float32")
-        gdp_data_important[col] = gdp_data_important[col] / (gdp_data_important["area mi2"])
+        gdp_data_important[col] = gdp_data_important[col] / (gdp_data_important["POPESTIMATE2022"])
         # round to 2 decimal places
         gdp_data_important[col] = gdp_data_important[col].round(2)
+        
+    gdp_data_important = gdp_data_important.rename(columns={'POPESTIMATE2022': 'Population Estimate'})
         
     return gdp_data_important
 
