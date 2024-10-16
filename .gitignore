@@ -1,1 +1,3 @@
+# ignore all files in __pycache__ directories for the entire project
 data cleaning/__pycache__/
+

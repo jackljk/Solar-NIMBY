@@ -14,7 +14,8 @@ datapaths = {
     "unemployment": "data/unemployment_data.csv",
     "electric": "data/electric_data.csv",
     "NREL_Electric": "data/NREL_Electric_data.csv",
-    "population_data": "data/pop_data.csv"
+    "population_data": "data/pop_data.csv",
+    "solar_roof": "data/solar_roof_data.csv"
 }
 
 bounding_box = pd.read_csv("data/county_bounding_boxes.csv", dtype={"FIPS State": str, "FIPS County": str})
@@ -56,6 +57,9 @@ def load_data(
         electric = NREL_Electric(datapaths['NREL_Electric'])
     elif electric_dataset == 'EIA':
         electric = get_electric(datapaths['electric'], electric_customer_class)
+        
+    # Solar Roof
+    solar_roof = get_solar_roof_data(datapaths['solar_roof'], bounding_box)
 
     
     # Race
@@ -108,6 +112,9 @@ def load_data(
     
     # Merge Race
     merged = merged.merge(race, on=["State", "County Name"], how='outer')
+    
+    # Merge Solar Roof
+    merged = merged.merge(solar_roof, on=["State", "County Name"], how='outer')
     
     # Merge Election
     if type(election) == dict:

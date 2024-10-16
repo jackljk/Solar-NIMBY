@@ -78,6 +78,34 @@ def get_wind(datapath, fixed_BB):
 
     return wind_df
 
+#### Solar Roof Data #####
+def get_solar_roof_data(datapath, fixed_BB):
+    data = pd.read_csv(datapath)
+    solar_roof = data.groupby(["region_name", "state_name"]).sum().reset_index()[['region_name', 'state_name', 'existing_installs_count', 'kw_total', 'kw_median']]
+
+    solar_roof = solar_roof.rename(columns = {'region_name': 'County Name', 'state_name': 'State', 'existing_installs_count': 'Number of Existing Installs', 'kw_total': 'Total Installed Capacity (kW)', 'kw_median': 'Median Installed Capacity (kW)'})
+
+    solar_roof['County Name'] = solar_roof['County Name'].str.replace(' County', '').str.replace(' Parish', '').str.replace(".", "")
+    
+    # Merge wth the fixed bounding box to get the area
+    solar_roof = solar_roof.merge(fixed_BB, on=['State', 'County Name'], how='inner')
+    
+    # Normalize by area
+    solar_roof['Total Installed Capacity (kW/ 1000 sq mile)'] = solar_roof['Total Installed Capacity (kW)'] / solar_roof['area mi2'] * 1000
+    
+    solar_roof['Median Installed Capacity (kW / sq mile)'] = solar_roof['Median Installed Capacity (kW)'] / solar_roof['area mi2']
+    
+    solar_roof['Number of Existing Installs / sq mile'] = solar_roof['Number of Existing Installs'] / solar_roof['area mi2']
+    
+    # Round to 2 decimal places
+    solar_roof['Total Installed Capacity (kW/ 1000 sq mile)'] = solar_roof['Total Installed Capacity (kW/ 1000 sq mile)'].round(2)
+    solar_roof['Median Installed Capacity (kW / sq mile)'] = solar_roof['Median Installed Capacity (kW / sq mile)'].round(2)
+    solar_roof['Number of Existing Installs / sq mile'] = solar_roof['Number of Existing Installs / sq mile'].round(2)
+    
+    solar_roof = solar_roof.drop(columns=['GEOID', 'area mi2', 'area km2', 'FIPS State', 'FIPS County'])
+    
+    return solar_roof
+
 
 #### GDP CLEANING #####
 
@@ -731,4 +759,6 @@ def get_rural_urban_coverage(datapath):
     return data_merged
     
     
+    
+
     
