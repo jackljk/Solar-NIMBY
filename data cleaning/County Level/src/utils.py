@@ -1,6 +1,6 @@
 import geopandas as gpd
 import pandas as pd
-from helpers import *
+from src.helpers import *
 
 state_abbreviations = get_state_abbr()
 FIPS = FIPS_getter()

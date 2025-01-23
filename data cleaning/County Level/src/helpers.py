@@ -1,7 +1,9 @@
 import pandas as pd
+from src.CONSTANTS import get_file_path
 
-FIPS_DF = pd.read_csv("data/FIPS.csv", dtype=str)
-EIA_FIPS = pd.read_csv("data/EIA_ID.csv", dtype={'utility_id_eia': str, 'county_id_fips': str})[['county_id_fips', 'utility_id_eia']]
+
+FIPS_DF = pd.read_csv(get_file_path('FIPS'), dtype=str)
+EIA_FIPS = pd.read_csv(get_file_path('EIA_Electric'), dtype={'utility_id_eia': str, 'county_id_fips': str})[['county_id_fips', 'utility_id_eia']]
 
 def to_int(df):
     # strip all ',' from string numbers
