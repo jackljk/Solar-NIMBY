@@ -9,3 +9,6 @@
 - `regression` contains the code for the regression analysis and also contained the cleaned data files and the merging of the data files.
 
 - `TechnoEcon Df Creation` `TechnoEcon Df Creation` contains the code to create the dataframe that contains the technical and economic data from the GEM Model
+
+# Large Dataset download
+[link](https://zenodo.org/records/14760494)
