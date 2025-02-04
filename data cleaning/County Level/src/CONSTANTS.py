@@ -2,9 +2,9 @@ RAW_DATA_DIRECTORY = "../../data" # Add the path to the raw data folder here
 
 
 data_file_mappings_county_raw = {
-    "Wind": "wind/ez_gis.plant_power_eia_v8_wind.shp",
-    "Solar": "solar/solar_raw.csv",
-    "solar_roof": "solar/solar_roof_raw.csv",
+    "Wind": "../projects/wind/ez_gis.plant_power_eia_v8_wind.shp",
+    "Solar": "../projects/solar/solar_raw.csv",
+    "solar_roof": "../projects/solar/solar_roof_raw.csv",
     "GDP": "social factors/gdp_raw.csv",
     "education": "social factors/education_raw.csv",
     "private_schools": "social factors/private_school_raw.csv",
